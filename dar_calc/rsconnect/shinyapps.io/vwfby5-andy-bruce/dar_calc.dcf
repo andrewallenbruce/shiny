@@ -1,0 +1,14 @@
+name: dar_calc
+title: dar_calc
+username:
+account: vwfby5-andy-bruce
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5793475
+bundleId: 5651276
+url: https://himni.shinyapps.io/dar_calc/
+when: 1646652258.44323
+lastSyncTime: 1646652258.44323
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: origin_shiny_app.R
