@@ -1,0 +1,684 @@
+---
+title: "EHR UX/UI Mockup"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    source_code: embed
+    theme:
+        version: 4
+        primary: "#2C3E50"
+        navbar-bg: "#2C3E50"
+    mathjax: null
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(htmltools)
+library(summarywidget)
+library(crosstalk)
+library(tidyverse)
+library(lubridate)
+library(reactable)
+library(reactablefmtr)
+library(htmltools)
+library(htmlwidgets)
+library(d3scatter)
+library(ggsci)
+library(rmarkdown)
+
+valueBoxSummaryWidget <- function (value, caption = NULL, icon = NULL, color = NULL, href = NULL) 
+{
+    if (!is.null(color) && color %in% c("primary", "info", 
+        "success", "warning", "danger")) 
+        color <- paste0("bg-", color)
+    valueOutput <- tags$span(class = "value-summarywidget-output", `data-caption` = caption, 
+        `data-icon` = icon, `data-color` = color, 
+        `data-href` = href, value)
+    hasPrefix <- function(x, prefix) {
+        if (!is.null(x)) 
+            grepl(paste0("^", prefix), x)
+        else FALSE
+    }
+    fontAwesome <- hasPrefix(icon, "fa")
+    ionicons <- hasPrefix(icon, "ion")
+    deps <- flexdashboard:::html_dependencies_fonts(fontAwesome, ionicons)
+    if (length(deps) > 0) 
+        valueOutput <- attachDependencies(valueOutput, deps)
+    valueOutput
+}
+```
+
+```{r setup2, include = FALSE}
+# Excel Read In
+ehr_poc1 <- readxl::read_xlsx(
+    "C:/Users/andyb/Documents/R/R_Projects/Distill_Blog/data/ehr_poc2.xlsx",
+    sheet =
+        "Sheet1",
+    na = "MISSING")
+
+## Add 'Age' Column - Age of Claim
+ehr_poc1$today <- as.Date(ehr_poc1$today, "%yyyy-%mm-%dd", tz = "EST")
+ehr_poc1$dos <- as.Date(ehr_poc1$dos, "%yyyy-%mm-%dd", tz = "EST")
+
+ehr_poc1 <- ehr_poc1 %>%
+    mutate(age = days(today) - days(dos))
+
+ehr_poc1$age <- as.numeric(ehr_poc1$age, "hours")
+
+ehr_poc1 <- ehr_poc1 %>%
+    mutate(age = age / 24)
+
+## Convert 'Billed' Column to Date Type
+ehr_poc1$bill <- as.Date(ehr_poc1$bill, "%yyyy-%mm-%dd", tz = "EST")
+
+## Add 'Bucket' Column to assign an Aging Bucket to each claim
+ehr_poc1 <- ehr_poc1 %>%
+    mutate(bucket = case_when(
+        ehr_poc1$age < 31 ~ "0-30",
+        ehr_poc1$age >= 31 & ehr_poc1$age < 61 ~ "31-60",
+        ehr_poc1$age >= 61 & ehr_poc1$age < 91 ~ "61-90",
+        ehr_poc1$age >= 91 & ehr_poc1$age < 121 ~ "91-120",
+        ehr_poc1$age >= 121 & ehr_poc1$age < 151 ~ "121-150",
+        ehr_poc1$age >= 151 & ehr_poc1$age < 181 ~ "151-180",
+        ehr_poc1$age >= 181 ~ "181+",
+        TRUE ~ "Other"
+    ))
+
+## Add 'Review' Column to assign Claims to Responsible Party
+ehr_poc1 <- ehr_poc1 %>%
+    mutate(review = case_when(
+        ehr_poc1$stat == "Unsigned" ~ "Client",
+        ehr_poc1$stat == "Charges" ~ "Client",
+        ehr_poc1$stat == "Location" ~ "Client",
+        ehr_poc1$stat == "Refund" ~ "Client",
+        ehr_poc1$stat == "Credit" ~ "Client",
+        ehr_poc1$stat == "Complete" ~ "None",
+        ehr_poc1$stat == "Billed" ~ "Billing",
+        ehr_poc1$stat == "New" ~ "Billing",
+        ehr_poc1$stat == "Ready" ~ "Billing",
+        ehr_poc1$stat == "Rejection" ~ "Billing",
+        ehr_poc1$stat == "Denial" ~ "Aging",
+        ehr_poc1$stat == "Appeal" ~ "Aging",
+        TRUE ~ "Missing Status"
+    ))
+
+## Add 'stat2' Column to group Incomplete Statuses
+ehr_poc1 <- ehr_poc1 %>%
+    mutate(stat2 = case_when(
+        ehr_poc1$stat == "Unsigned" ~ "Incomplete",
+        ehr_poc1$stat == "Charges" ~ "Incomplete",
+        ehr_poc1$stat == "Location" ~ "Incomplete",
+        ehr_poc1$stat == "Refund" ~ "Review",
+        ehr_poc1$stat == "Credit" ~ "Review",
+        ehr_poc1$stat == "Complete" ~ "Complete",
+        ehr_poc1$stat == "Billed" ~ "Billed",
+        ehr_poc1$stat == "New" ~ "New",
+        ehr_poc1$stat == "Ready" ~ "Ready",
+        ehr_poc1$stat == "Rejection" ~ "Rejection",
+        ehr_poc1$stat == "Denial" ~ "Denial",
+        ehr_poc1$stat == "Appeal" ~ "Appeal",
+        TRUE ~ "Missing Status"
+    ))
+
+## Create the Crosstalk 'SharedData' dataframe
+ehr_cross <- SharedData$new(ehr_poc1)
+```
+
+```{css css-special}
+/* Optional: embed custom fonts here with `@import`          */
+/* This must remain at the top of this file.                 */
+@import url('https://fonts.googleapis.com/css?family=Karla:400,700');
+
+/* Styles for the table */
+.rcm-tbl {
+  font-size: 14px;
+  line-height: 14px;
+  font-family: Karla, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.rcm-tbl a {
+  color: inherit;
+}
+
+/* Styles for the column headers */
+.col-header {
+  border-bottom: 2px solid #555;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-family: Karla, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.col-header:hover {
+  background-color: #eee;
+}
+
+.col-header[aria-sort="ascending"] {
+  box-shadow: inset 0 3px 0 0 rgba(0, 0, 0, 0.6) !important;
+}
+
+.col-header[aria-sort="descending"] {
+  box-shadow: inset 0 -3px 0 0 rgba(0, 0, 0, 0.6) !important;
+}
+
+.col-header {
+  transition: box-shadow 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.col-footer {
+  border-bottom: 2px solid #555;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-family: Karla, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Styles for the status badges */
+.tag {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 15px;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.status-billed {
+  background: hsl(116, 60%, 90%);
+  color: hsl(116, 30%, 25%);
+}
+
+.status-ready {
+  background: hsl(116, 60%, 90%);
+  color: hsl(116, 30%, 25%);
+}
+
+.status-new {
+  background: hsl(116, 60%, 90%);
+  color: hsl(116, 30%, 25%);
+}
+
+.status-complete {
+  background: hsl(350, 70%, 90%);
+  color: hsl(350, 45%, 30%);
+}
+
+.status-credit {
+  background: hsl(350, 70%, 90%);
+  color: hsl(350, 45%, 30%);
+}
+
+.status-refund {
+  background: hsl(350, 70%, 90%);
+  color: hsl(350, 45%, 30%);
+}
+
+.status-charges {
+  background: hsl(0, 100%, 50%);
+  color: hsl(230, 45%, 30%);
+}
+
+.status-denial {
+  background: hsl(230, 70%, 90%);
+  color: hsl(230, 45%, 30%);
+}
+
+.status-appeal {
+  background: hsl(230, 70%, 90%);
+  color: hsl(230, 45%, 30%);
+}
+
+.status-location {
+  background: hsl(230, 70%, 90%);
+  color: hsl(230, 45%, 30%);
+}
+
+.status-rejection {
+  background: hsl(230, 70%, 90%);
+  color: hsl(230, 45%, 30%);
+}
+
+.status-unsigned {
+  background: hsl(230, 70%, 90%);
+  color: hsl(230, 45%, 30%);
+}
+```
+
+
+<script>
+window.FlexDashboardComponents.push({
+
+  type: 'custom',
+
+  find: function(container) {
+    if (container.find('span.value-summarywidget-output').length)
+      return container;
+    else
+      return $();
+  },
+
+  flex: function(fillPage) {
+    return false;
+  },
+
+  layout: function(title, container, element, fillPage) {
+
+    // alias variables
+    var chartTitle = title;
+    var valueBox = element;
+
+    // add value-box class to container
+    container.addClass('value-box');
+
+    // value paragraph
+    var value = $('<p class="value"></p>');
+
+    // if we have shiny-text-output then just move it in
+    var valueOutputSpan = [];
+    var shinyOutput = valueBox.find('.shiny-valuebox-output').detach();
+    var summaryOutput = valueBox.find('.summarywidget').detach();
+    
+    if (shinyOutput.length) {
+      valueBox.children().remove();
+      shinyOutput.html('&mdash;');
+      value.append(shinyOutput);
+    }
+    
+    if (summaryOutput.length) {
+      value.append(summaryOutput);
+      valueOutputSpan = valueBox.find('span.value-summarywidget-output')
+    }
+
+    // caption
+    var caption = $('<p class="caption"></p>');
+    caption.append(chartTitle);
+
+    // build inner div for value box and add it
+    var inner = $('<div class="inner"></div>');
+    inner.append(value);
+    inner.append(caption);
+    valueBox.append(inner);
+
+    // add icon if specified
+    var icon = $('<div class="icon"><i></i></div>');
+    valueBox.append(icon);
+    function setIcon(chartIcon) {
+      var iconLib = '';
+      var iconSplit = chartIcon.split(' ');
+      if (iconSplit.length > 1) {
+        iconLib = iconSplit[0];
+        chartIcon = iconSplit.slice(1).join(' ');
+      } else {
+        var components = chartIcon.split('-');
+        if (components.length > 1)
+          iconLib = components[0];
+      }
+      icon.children('i').attr('class', iconLib + ' ' + chartIcon);
+    }
+    var chartIcon = valueBox.attr('data-icon');
+    if (chartIcon)
+      setIcon(chartIcon);
+
+    // set color based on data-background if necessary
+    var dataBackground = valueBox.attr('data-background');
+    if (dataBackground)
+      valueBox.css('background-color', bgColor);
+    else {
+      // default to bg-primary if no other background is specified
+      if (!valueBox.hasClass('bg-primary') &&
+          !valueBox.hasClass('bg-info') &&
+          !valueBox.hasClass('bg-warning') &&
+          !valueBox.hasClass('bg-success') &&
+          !valueBox.hasClass('bg-danger')) {
+        valueBox.addClass('bg-primary');
+      }
+    }
+
+    // handle data attributes in valueOutputSpan
+    function handleValueOutput(valueOutput) {
+
+      // caption
+      var dataCaption = valueOutput.attr('data-caption');
+      if (dataCaption)
+        caption.html(dataCaption);
+
+      // icon
+      var dataIcon = valueOutput.attr('data-icon');
+      if (dataIcon)
+        setIcon(dataIcon);
+
+      // color
+      var dataColor = valueOutput.attr('data-color');
+      if (dataColor) {
+        if (dataColor.indexOf('bg-') === 0) {
+          valueBox.css('background-color', '');
+          if (!valueBox.hasClass(dataColor)) {
+             valueBox.removeClass('bg-primary bg-info bg-warning bg-danger bg-success');
+             valueBox.addClass(dataColor);
+          }
+        } else {
+          valueBox.removeClass('bg-primary bg-info bg-warning bg-danger bg-success');
+          valueBox.css('background-color', dataColor);
+        }
+      }
+
+      // url
+      var dataHref = valueOutput.attr('data-href');
+      if (dataHref) {
+        valueBox.addClass('linked-value');
+        valueBox.off('click.value-box');
+        valueBox.on('click.value-box', function(e) {
+          window.FlexDashboardUtils.showLinkedValue(dataHref);
+        });
+      }
+    }
+
+    // check for a valueOutputSpan
+    if (valueOutputSpan.length > 0) {
+      handleValueOutput(valueOutputSpan);
+    }
+
+    // if we have a shinyOutput then bind a listener to handle
+    // new valueOutputSpan values
+    shinyOutput.on('shiny:value',
+      function(event) {
+        var element = $(event.target);
+        setTimeout(function() {
+          var valueOutputSpan = element.find('span.value-output');
+          if (valueOutputSpan.length > 0)
+            handleValueOutput(valueOutputSpan);
+        }, 10);
+      }
+    );
+  }
+});
+</script>
+
+Sidebar {.sidebar}
+=====================================
+<left>
+
+```{r}
+    filter_checkbox("stat", "Status", ehr_cross, ~stat)
+    filter_select(
+            "prov", 
+            "Provider", 
+            ehr_cross,
+            ~prov, 
+            multiple = TRUE)
+    filter_select(
+            "loc", 
+            "Location", 
+            ehr_cross,
+            ~loc, 
+            multiple = TRUE)
+    filter_select(
+            "bucket", 
+            "Aging Bucket", 
+            ehr_cross,
+            ~bucket, 
+            multiple = TRUE)
+    filter_select(
+            "instype", 
+            "Aging Class", 
+            ehr_cross,
+            ~instype, 
+            multiple = TRUE)
+```
+</left>
+
+# Data View
+
+Row {data-width=350}
+-----------------------------------------------------------------------
+
+### Encounters Selected
+
+```{r}
+valueBoxSummaryWidget(
+  summarywidget(
+    ehr_cross,
+    statistic = 'count',
+    column = 'enc',
+    digits = 0
+  ),
+  color = "#E5E5E5"
+)
+```
+
+### Total Balance
+
+```{r}
+valueBoxSummaryWidget(
+  summarywidget(
+    ehr_cross,
+    statistic = 'sum',
+    column = 'bal',
+    digits = 2
+  ),
+  color = "#E5E5E5"
+)
+```
+
+### Average Balance
+
+```{r}
+valueBoxSummaryWidget(
+  summarywidget(
+    ehr_cross,
+    statistic = 'mean',
+    column = 'bal',
+    digits = 2
+  ),
+  color = "#E5E5E5"
+)
+```
+
+### Average Age of Encounters
+
+```{r}
+valueBoxSummaryWidget(
+  summarywidget(
+    ehr_cross,
+    statistic = 'mean',
+    column = 'age',
+    digits = 0
+  ),
+  color = "#E5E5E5"
+)
+```
+
+### Average Days to Untimely
+
+```{r}
+valueBoxSummaryWidget(
+  summarywidget(
+    ehr_cross,
+    statistic = 'mean',
+    column = 'timcount',
+    digits = 0
+  ),
+  color = "#E5E5E5"
+)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### 
+
+```{r ehrtable, echo=FALSE, message=FALSE, warning=FALSE}
+  div(
+class = "rcm-tbl",
+## Interactive Billing Reactable
+reactable(
+    ehr_cross,
+    selection = "multiple",
+    onClick = "select",
+    pagination = TRUE,
+    bordered = TRUE,
+    highlight = TRUE,
+    filterable = FALSE,
+    searchable = FALSE,
+    compact =TRUE,
+    outlined = TRUE,
+    striped = FALSE,
+    wrap = TRUE,
+    paginationType = "jump",
+    showPageSizeOptions = TRUE,
+    defaultPageSize = 15,
+  defaultSorted = list(
+      dos = "desc",
+      bal = "asc"),
+  defaultColDef = colDef(
+    class = "rcm-tbl",
+    footerStyle = list(fontWeight = "bold"),
+    headerClass = "col-header",
+    footerClass = "col-footer",
+    align = "left",
+    vAlign = "center"),
+  columns = list(
+      enc = colDef(
+          name = "Encounter",
+          cell = function(value, index) {
+        type <- ehr_poc1$type[index]
+        type <- if (!is.na(type)) type else "Unknown"
+        div(
+          div(style = list(fontWeight = 600), value),
+          div(style = list(fontSize = 12), type)
+        )
+      }
+          ),
+      type = colDef(
+          name = "Type",
+          show = FALSE
+          ),
+      pt = colDef(
+          name = "Patient"
+          ),
+      dos = colDef(
+          name = "DOS",
+          format = colFormat(date = TRUE)
+          ),
+      prov = colDef(
+          name = "Provider",
+          na = "MISSING",
+          #width = 80
+          ),
+      loc = colDef(
+          name = "Location",
+          na = "MISSING",
+          #width = 80
+          ),
+      payer = colDef(
+          name = "Payer",
+          na = "MISSING",
+          #width = 80
+          ),
+      instype = colDef(
+          name = "Class",
+          na = "MISSING",
+          #width = 80
+          ),
+      stat = colDef(
+          name = "Status",
+          cell = 
+              function(value) 
+                  {class <- paste0("tag status-", tolower(value))
+                  div(class = class, value)}
+          ),
+      bill = colDef(
+          name = "Billed",
+          format = colFormat(date = TRUE),
+          na = "UNBILLED"
+          ),
+      bal = colDef(
+                    style = color_scales(
+            ehr_poc1, 
+            colors = pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "Balance",
+          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2),
+              na = "MISSING",
+          footer = JS("function(colInfo) {
+        let total = 0
+        colInfo.data.forEach(function(row) {
+          total += row[colInfo.column.id]
+        })
+        return '$' + total.toFixed(2)
+      }")
+      ),
+      today = colDef(
+          name = "Today",
+          format = colFormat(date = TRUE),
+          show = FALSE
+          ),
+      note = colDef(
+          name = "Note",
+          format = colFormat(date = TRUE),
+          show = FALSE
+          ),
+      age = colDef(
+          name = "Age",
+          style = color_scales(
+            ehr_poc1, 
+            colors = pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          #width = 50,
+          na = "MISSING"
+          ),
+      bucket = colDef(
+          name = "Aging Bucket",
+          #width = 60,
+          na = "MISSING"
+          ),
+      timfilelim = colDef(
+          name = "Timely Filing Limit",
+          show = FALSE,
+          # width = 60,
+          na = "MISSING"
+          ),
+      timfildate = colDef(
+          name = "Timely Filing Deadline",
+          show = FALSE,
+          # width = 60,
+          na = "MISSING"
+          ),
+      timcount = colDef(
+          name = "Days to Untimely",
+          style = color_scales(
+            ehr_poc1, 
+            colors = pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = TRUE)(6)),
+          #width = 60,
+          na = "NA"
+          ),
+      stat2 = colDef(
+          name = "Status",
+          show = FALSE,
+          # width = 60,
+          na = "MISSING"
+          ),
+      review = colDef(
+          name = "Review",
+          show = TRUE,
+          # width = 60,
+          na = "MISSING"
+          )
+    )
+  )
+)
+# )
+```
