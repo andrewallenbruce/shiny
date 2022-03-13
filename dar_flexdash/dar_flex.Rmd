@@ -1,0 +1,575 @@
+---
+title: "Days in AR Analysis"
+output: 
+  flexdashboard::flex_dashboard:
+    theme:
+      fg: "#1a242f"
+      secondary: "#222f3d"
+      success: "#597ba1"
+      info: "#bfbfbf"
+      warning: "#ccbe93"
+      bg: "#ffffff"
+    vertical_layout: scroll
+    orientation: rows
+    css: styles.css
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(tidyverse)
+library(reactable)
+library(reactablefmtr)
+library(lubridate)
+library(ggrepel)
+```
+
+# DAR Calculator
+
+## INPUTS {.sidebar data-width="275"}
+
+<br>
+
+```{r inputs}
+dateRangeInput(
+    inputId = "daterange",
+    label = "Date Range:",
+    start = "2022-01-01",
+    end = lubridate::today(),
+    min = "2001-01-01",
+    max = lubridate::today() + 365,
+    startview = "month",
+    separator = " to ",
+    format = "mm-dd-yyyy",
+    autoclose = TRUE
+)
+numericInput(
+  inputId = "dart",
+  label = "Days in AR Target:",
+  min = 1,
+  max = 100,
+  value = 39.445,
+  width = "100%"
+  )
+numericInput(
+    inputId = "gct",
+    label = "Total Gross Charges:",
+    min = 1,
+    max = 1000000,
+    value = 362521.25,
+    step = 1,
+    width = "100%"
+    )
+numericInput(
+    inputId = "earb",
+    label = "Ending AR Balance:",
+    min = 1,
+    max = 1000000,
+    value = 450253.63,
+    step = 1,
+    width = "100%"
+    )
+textInput(
+  inputId = "client",
+  label = "Client Name:",
+  value = NULL,
+  width = "100%",
+  placeholder = "Enter Client Name"
+)
+```
+
+<hr>
+
+```{r sub}
+actionButton(
+  inputId = "submitButton", 
+  label = "Submit", 
+  icon = shiny::icon("ok", lib = "glyphicon"),
+  title = "Submit your inputs and they will populate in the table.",
+  width = "100%"
+  )
+```
+
+<br>
+
+```{r book}
+# bookmarkButton(
+#   label = "Bookmark",
+#   icon = shiny::icon("link", lib = "glyphicon"),
+#   title = "Bookmark this application's state and get a URL for sharing.",
+#   id = "._bookmark_",
+#   width = "100%"
+# )
+# enableBookmarking("url")
+```
+
+## Value Boxes
+
+### Number of Days
+
+```{r ndip}
+ndip2 <- reactive({
+    (as.numeric(input$daterange[2] - input$daterange[1], "hours") / 24 + 1)
+})
+
+output$dateBox <- renderValueBox({
+    valueBox(
+      caption = "Number of Days in Period", 
+      value = tags$p(paste(ndip2(), " Days"), style = "font-color: #ffffff"), 
+      icon = "fa-calendar",
+      color = "#2c3e50", 
+            )
+    })
+
+valueBoxOutput("dateBox", width = 2)
+```
+
+### Average Daily Charge
+
+```{r adc}
+adc <-reactive({
+    input$gct / ndip2()
+    })
+
+output$adcBox <- renderValueBox({
+    options(scipen = 999)
+    valueBox(
+      caption = "Average Daily Charge",
+      value = scales::dollar(
+                adc(), 
+                prefix = "$", 
+                big.mark = ",", 
+                decimal.mark = ".", 
+                negative_parens = TRUE),
+      icon = "fa-dollar-sign",
+      color = "#30475b"
+            )
+    })
+
+valueBoxOutput("adcBox", width = 2)
+```
+
+### Days in AR
+
+```{r dar}
+dar <-reactive({
+        input$earb / (input$gct / ndip2())
+    })
+
+dar2 <-reactive({
+        earbtarg() / (input$gct / ndip2())
+    })
+
+output$darBox <- renderValueBox({
+    valueBox(
+      caption = "Days in AR",
+      value = paste0(round(dar(), 
+              digits = 2), " Days"),
+      icon = "fa-map-marker",
+      color = "#D50A0A"
+      )
+    })
+
+valueBoxOutput("darBox", width = 2)
+```
+
+### AR Target
+
+```{r art}
+irat <-reactive({
+    input$dart / ndip2()
+    })
+
+arat <-reactive({
+    input$earb / input$gct
+    })
+
+ratdif <-reactive({
+    arat() - irat()
+    })
+
+earbtarg <-reactive({
+    input$gct * irat()
+    })
+
+output$artBox <- renderValueBox({
+    options(scipen = 999)
+    valueBox(
+      caption = "AR Target",
+      value = scales::dollar(
+        earbtarg(), 
+        prefix = "$", 
+        big.mark = ",", 
+        decimal.mark = ".", 
+        negative_parens = TRUE),
+      icon = "fa-tachometer",
+      color = "#798d8f"
+      )
+    })
+
+valueBoxOutput("artBox", width = 2)
+```
+
+### AR Change Needed
+
+```{r arch}
+arat <-reactive({
+    input$earb / input$gct
+    })
+
+ratdif <-reactive({
+    arat() - irat()
+    })
+
+earbtarg <-reactive({
+    input$gct * irat()
+    })
+
+arch <-reactive({
+    earbtarg() - input$earb
+    })
+
+output$archBox <- renderValueBox({
+    options(scipen = 999)
+    valueBox(
+      caption = "AR Change Needed",
+      value = scales::dollar(
+        arch(), 
+        prefix = "$", 
+        big.mark = ",", 
+        decimal.mark = ".", 
+        negative_parens = TRUE),
+      icon = "fa-life-ring",
+      color = "#1a242f"
+      )
+    })
+
+valueBoxOutput("archBox", width = 2)
+```
+
+## Row
+
+### Instructions for the Application
+
+-   In the left panel, enter:
+
+1.  the `Date Range` for which you are measuring Days in AR
+2.  the `Days in AR target` number that you are measuring against and
+3.  the `total Gross Charges` and `Ending AR balance` for the period you are measuring.
+
+-   The results of the calculations will populate in the `value boxes` above. If the `AR Change Needed` box's figure is enclosed in parentheses, it is showing the dollar amount that must be *removed* from the AR balance for Days in AR to fall below your target DAR.
+-   The graph to the left will display the Gross Charges and Ending AR balance, on the x- and y-axis, respectively. If the point labelled "Actual DAR" is *red, triangular* and *above* and *to the left* of the dashed line, your Days in AR is *above* the target DAR you entered.
+
+> If you would like to make several calculations and store the results for comparison while using the app, click the **Submit** button after inputting the information. The results will be stored in the table below while you use the app. No data that you have entered will be kept once the app is closed.
+
+### {data-height="100%"}
+
+```{r plot1}
+color <- reactive({
+    dplyr::case_when(dar() > input$dart ~ "#D50A0A", TRUE ~ "#013369")
+    })
+    
+shape <- reactive({
+    dplyr::case_when(dar() > input$dart ~ 17, TRUE ~ 19)
+    })
+
+# color2 <- reactive({
+#     dplyr::case_when(dar2() > input$dart ~ "#D50A0A", TRUE ~ "#013369")
+#     })
+#     
+# shape2 <- reactive({
+#     dplyr::case_when(dar2() > input$dart ~ 17, TRUE ~ 19)
+#     })
+    
+output$scatter1 <-renderPlot({
+    options(scipen = 999)
+    ggplot(group=1) +
+        geom_point(aes(
+            input$gct, 
+            input$earb, 
+            color = color(), 
+            shape = shape()), 
+            size = 7, 
+            alpha = 1, 
+            na.rm = TRUE) +
+        # geom_point(aes(
+        #     input$gct, 
+        #     earbtarg(), 
+        #     color = color2(), 
+        #     shape = shape2()), 
+        #     size = 7, 
+        #     alpha = 1, 
+        #     na.rm = TRUE) +
+        geom_abline(
+            intercept = 0, 
+            slope = irat(), 
+            linetype = 5, 
+            size = 1.5, 
+            alpha = 0.7, 
+            color = "#1a242f") +
+        ggrepel::geom_label_repel(aes(
+            input$gct, 
+            input$earb, 
+            color = color(),
+            fill = color()),
+            label = paste0(
+              "DAR: ", 
+              round(dar(), 
+                    digits = 2
+                    )
+              ),  
+            size = 5,
+            fontface = "bold", color = "white",
+            force = 0.2,
+            force_pull = 0.2,
+            box.padding = 2,
+            label.padding = 0.8,
+            point.padding = 0.8,
+            segment.color = "grey50", segment.size = 1,
+            label.r = 0.5,
+            label.size = 0.5
+            ) +
+        # ggrepel::geom_label_repel(aes(
+        #     input$gct, 
+        #     earbtarg(), 
+        #     color = color2(),
+        #     fill = color2(),
+        #     label = paste0("Target DAR: ", round(dar2(), digits = 2))),
+        #     size = 5,
+        #     fontface = "bold", color = "white",
+        #     force = 0.3,
+        #     force_pull = 0.2,
+        #     box.padding = 2,
+        #     label.padding = 0.8,
+        #     point.padding = 0.8,
+        #     segment.color = "grey50", segment.size = 1,
+        #     label.r = 0.5,
+        #     label.size = 0.5
+        #     ) +
+            scale_y_continuous(
+                labels = scales::dollar_format(
+                    prefix="$"), 
+                limits = c(0, input$earb * 2.25)) +
+            scale_x_continuous(
+                labels = scales::dollar_format(
+                    prefix="$"), 
+                limits = c(0, input$gct * 2.25))+
+            #tidyquant::scale_color_tq() +
+            #tidyquant::scale_fill_tq() +
+            scale_shape_identity() +
+            labs(
+              title = "Days in AR Key Indicator: Total Gross Charges & Ending AR Balance",
+                x = "Total Gross Charges", 
+                y = "Ending AR Balance") +
+            #tidyquant::theme_tq(base_size = 16) +
+            theme(
+              panel.grid.minor = element_blank(),
+              panel.grid.major.y = element_line(),
+              panel.grid.major.x = element_line(),
+              axis.ticks = element_blank(),
+              legend.position = "none",
+              axis.title.x = element_text(family = "karla", face = "bold", size=16),
+              axis.title.y = element_text(family = "karla", face = "bold", size=16),
+              plot.title = element_text(family = "karla", face = "bold", size=18)
+              )
+    })
+
+plotOutput(outputId = "scatter1")
+```
+
+```{r}
+# whole <-reactive({
+#     input$earb + input$gct
+#     })
+# 
+# arprop <-reactive({
+#     input$earb / whole()
+#     })
+# 
+# gcprop <-reactive({
+#     input$gct / whole()
+#     })
+```
+
+## Row {data-width="100%"}
+
+### 
+
+```{r reactable}
+values <- reactiveValues()
+    values$df <- data.frame(
+      Client = character(),
+      Start_Date = character(),
+      End_Date = character(),
+      Number_of_Days = numeric(), 
+      Gross_Charges = numeric(), 
+      DAR_Target = numeric(), 
+      Ending_AR = numeric(), 
+      Avg_Daily_Charge = numeric(), 
+      Days_in_AR = numeric(), 
+      AR_Target = numeric(), 
+      AR_Change_Needed = numeric())
+
+    observeEvent(input$submitButton, {
+        new_row <- data.frame(
+          Client = input$client,
+          Start_Date = as.character(input$daterange[1]),
+          End_Date = as.character(input$daterange[2]),
+          Number_of_Days = ndip2(), 
+          Gross_Charges = input$gct, 
+          DAR_Target = input$dart, 
+          Ending_AR = input$earb, 
+          Avg_Daily_Charge = adc(), 
+          Days_in_AR = dar(), 
+          AR_Target = earbtarg(), 
+          AR_Change_Needed = arch())
+        values$df <- rbind(values$df, new_row)
+    })
+
+output$table <- renderReactable({
+      reactable(
+        values$df,
+        theme = pff(
+          font_size = 16,
+          font_color = "#878e94",
+          header_font_size = 14,
+          header_font_color = "#ffffff",
+          cell_padding = 4,
+          centered = FALSE
+          ),
+        columns = list(
+          Client = colDef(
+            name = "Client"
+            ),
+          Start_Date = colDef(
+            name = "Start Date",
+            format = colFormat(date = TRUE)
+            ),
+          End_Date = colDef(
+            name = "End Date",
+            format = colFormat(date = TRUE)
+            ),
+          Number_of_Days = colDef(
+            name = "Days in Period",
+            show = TRUE
+            ),
+          Gross_Charges = colDef(
+                    style = color_scales(
+            values$df, 
+            colors = ggsci::pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "Gross Charges",
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          ),
+          Ending_AR = colDef(
+                    style = color_scales(
+            values$df, 
+            colors = ggsci::pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "Ending AR",
+          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          ),
+          DAR_Target = colDef(
+            name = "DAR Target",
+            show = FALSE
+            ),
+          Avg_Daily_Charge = colDef(
+                    style = color_scales(
+            values$df, 
+            colors = ggsci::pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "Avg Daily Charge",
+          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          ),
+          Days_in_AR = colDef(
+                    style = color_scales(
+            values$df, 
+            colors = ggsci::pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "Days in AR",
+          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          ),
+          AR_Target = colDef(
+                    style = color_scales(
+            values$df, 
+            colors = ggsci::pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "AR Target",
+          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          ),
+          AR_Change_Needed = colDef(
+                    style = color_scales(
+            values$df, 
+            colors = ggsci::pal_material(
+              "blue-grey", 
+              n = 6, 
+              alpha = 1.0, 
+              reverse = FALSE)(6)),
+          name = "AR Change Needed",
+          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          )
+          )
+        )
+    })
+    
+reactableOutput("table")
+```
+
+# Days in AR Guide
+
+## Column
+
+### Formula Quick Reference
+
+<br>
+
+$$
+{\textrm{Average Daily Charge}} = \dfrac {\textrm{Gross Charges}}{\textrm{Number of Days in Period}}
+$$
+
+<br> <br>
+
+$$
+{\textrm{Days in AR}} = \dfrac {\textrm{Ending AR Balance}}{\textrm{Average Daily Charge}}
+$$
+
+<br> <br>
+
+$$
+{\textrm{AR Needed}} = \Bigg({\textrm{Gross Charges}} \left(\dfrac {\textrm{Days in AR Target}}{\textrm{Number of Days in Period}}\right)\Bigg) - {\textrm{Ending AR}}
+$$ <br> <br>
