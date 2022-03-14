@@ -31,14 +31,14 @@ library(ggrepel)
 
 ## SIDEBAR: Inputs {.sidebar data-width="275"}
 
-<br>
+<hr>
 
 ```{r inputs}
 dateRangeInput(
     inputId = "daterange",
     label = "Date Range:",
     start = "2022-01-01",
-    end = "2022-01-31",
+    end = "2022-03-31",
     min = "2001-01-01",
     max = lubridate::today() + 365,
     startview = "month",
@@ -52,6 +52,7 @@ numericInput(
   min = 1,
   max = 100,
   value = 39.445,
+  step = 0.05,
   width = "100%"
   )
 numericInput(
@@ -60,7 +61,7 @@ numericInput(
     min = 1,
     max = 1000000,
     value = 362521.25,
-    step = 1,
+    step = .01,
     width = "100%"
     )
 numericInput(
@@ -69,7 +70,16 @@ numericInput(
     min = 1,
     max = 1000000,
     value = 450253.63,
-    step = 1,
+    step = .01,
+    width = "100%"
+    )
+numericInput(
+    inputId = "consid",
+    label = "Consideration Amount:",
+    min = 1,
+    max = 1000000,
+    value = 0,
+    step = .01,
     width = "100%"
     )
 textInput(
@@ -79,33 +89,15 @@ textInput(
   width = "100%",
   placeholder = "Enter Client Name"
 )
-```
-
-<hr>
-
-```{r update}
 actionButton(
-    inputId = "updateButton",
-    label = "Update", 
-    icon = shiny::icon("refresh", lib = "glyphicon"),
-    title = "Update your inputs.",
+    inputId = "submitButton",
+    label = "Submit",
+    icon = shiny::icon("ok", lib = "glyphicon"),
     width = "100%"
 )
 ```
 
-<br>
-
-```{r submit}
-actionButton(
-  inputId = "submitButton", 
-  label = "Submit", 
-  icon = shiny::icon("ok", lib = "glyphicon"),
-  title = "Submit your inputs and they will populate in the table.",
-  width = "100%"
-  )
-```
-
-<br>
+<hr>
 
 ```{r bookmark}
 bookmarkButton(
@@ -127,13 +119,16 @@ enableBookmarking(store = "url")
 
 <br>
 
-```{r download}
-downloadButton(
-    outputId = "downloadButton",
-    label = "Download CSV",
-    icon = shiny::icon("download", lib = "glyphicon"),
-    title = "Download a csv file of data stored in table",
-    width = "100%"
+```{r download, eval=FALSE, include=FALSE}
+downloadButton("downloadData", "Download")
+
+output$downloadData <- downloadHandler(
+    filename = function() {
+        paste(datadl, "dar-data-", Sys.Date(), ".csv", sep = ".")
+    },
+    content = function(file) {
+        write.csv(datadl, file, na = "NA", dec = ".")
+    }
 )
 ```
 
@@ -142,14 +137,14 @@ downloadButton(
 ### Number of Days
 
 ```{r ndip}
-ndip2 <- reactive({
+ndip <- reactive({
     (as.numeric(input$daterange[2] - input$daterange[1], "hours") / 24 + 1)
 })
 
 output$dateBox <- renderValueBox({
     valueBox(
       caption = "Number of Days in Period", 
-      value = tags$p(paste(ndip2(), " Days"), style = "font-color: #ffffff"), 
+      value = paste0(ndip(), " Days"), 
       icon = "fa-calendar",
       color = "#2c3e50", 
             )
@@ -162,7 +157,7 @@ valueBoxOutput("dateBox", width = 2)
 
 ```{r adc}
 adc <-reactive({
-    input$gct / ndip2()
+    input$gct / ndip()
     })
 
 output$adcBox <- renderValueBox({
@@ -186,12 +181,12 @@ valueBoxOutput("adcBox", width = 2)
 ### Days in AR
 
 ```{r dar}
-dar <-reactive({
-        input$earb / (input$gct / ndip2())
-    })
+earb <-reactive({
+    input$earb - input$consid
+})
 
-dar2 <-reactive({
-        earbtarg() / (input$gct / ndip2())
+dar <-reactive({
+        earb() / adc()
     })
 
 output$darBox <- renderValueBox({
@@ -211,11 +206,11 @@ valueBoxOutput("darBox", width = 2)
 
 ```{r art}
 irat <-reactive({
-    input$dart / ndip2()
+    input$dart / ndip()
     })
 
 arat <-reactive({
-    input$earb / input$gct
+    earb() / input$gct
     })
 
 ratdif <-reactive({
@@ -248,7 +243,7 @@ valueBoxOutput("artBox", width = 2)
 
 ```{r arch}
 arat <-reactive({
-    input$earb / input$gct
+    earb() / input$gct
     })
 
 ratdif <-reactive({
@@ -260,7 +255,7 @@ earbtarg <-reactive({
     })
 
 arch <-reactive({
-    earbtarg() - input$earb
+    earbtarg() - earb()
     })
 
 output$archBox <- renderValueBox({
@@ -292,27 +287,22 @@ valueBoxOutput("archBox", width = 2)
 3.  the `total Gross Charges` and `Ending AR balance` for the period you are measuring
 
 -   The results of the calculations will populate in the `Value Boxes` above. If the `AR Change Needed` amount is *enclosed in parentheses*, that amount must be *removed* from the `Ending AR balance` for `Days in AR` to fall below your `Days in AR Target`.
--   The plot to the left shows your `total Gross Charges` (x-axis) and `Ending AR balance` (y-axis) as a point, labelled with your current `Days in AR`. You want the point to be above and to the left of the diagonal line (representing the `Ideal Ratio` for the `Number of Days in the Period`) for `Days in AR` to be under the `Days in AR` target.
+
+-   The plot on the right shows your `total Gross Charges` (x-axis) and `Ending AR balance` (y-axis) as a point, labelled with your current `Days in AR`. 
+
+-   You want the point to be **above** and to the **left** of the diagonal line (representing the `Ideal Ratio` for the `Number of Days in the Period`) for `Days in AR` to be under the `Days in AR` target.
 
 > If you would like to make several calculations and store the results for comparison while using the app, click the **Submit** button after inputting the information. The results will be stored in the table below while you use the app. No data that you have entered will be kept once the app is closed.
 
-### DAR Key Indicators: Gross Charges ($x$), Ending AR ($y$), Days in Period (Diagonal Line) {data-height="100%"}
+### DAR Key Indicators: Gross Charges ($x$), Ending AR ($y$), Number of Days in Period ($m$) {data-height="100%"}
 
 ```{r plot1}
-color <- reactive({
-    dplyr::case_when(dar() > input$dart ~ "#D50A0A", TRUE ~ "#013369")
-    })
-    
-shape <- reactive({
-    dplyr::case_when(dar() > input$dart ~ 17, TRUE ~ 19)
-    })
-
 output$scatter1 <-renderPlot({
     options(scipen = 999)
     ggplot(group=1) +
         geom_point(aes(
             input$gct, 
-            input$earb, 
+            earb(), 
             color = color(), 
             shape = shape()), 
             size = 7, 
@@ -327,7 +317,7 @@ output$scatter1 <-renderPlot({
             color = "#1a242f") +
         ggrepel::geom_label_repel(aes(
             input$gct, 
-            input$earb, 
+            earb(), 
             color = color(),
             fill = color()),
             label = paste0(
@@ -349,14 +339,14 @@ output$scatter1 <-renderPlot({
             scale_y_continuous(
                 labels = scales::dollar_format(
                     prefix="$"), 
-                limits = c(0, input$earb * 2.25)) +
+                limits = c(0, earb() * 2.25)) +
             scale_x_continuous(
                 labels = scales::dollar_format(
                     prefix="$"), 
                 limits = c(0, input$gct * 2.25))+
-        tidyquant::theme_tq(base_size = 16) +
-            tidyquant::scale_color_tq() +
-            tidyquant::scale_fill_tq() +
+        tidyquant::theme_tq(base_size = 12) +
+        tidyquant::scale_color_tq() +
+        tidyquant::scale_fill_tq() +
             scale_shape_identity() +
             labs(
               title = NULL,
@@ -364,16 +354,19 @@ output$scatter1 <-renderPlot({
                 y = "Ending AR Balance") +
             theme(
               panel.grid.minor = element_blank(),
-              panel.grid.major.y = element_line(),
-              panel.grid.major.x = element_line(),
+              panel.grid.major.y = element_line(color = "grey50"),
+              panel.grid.major.x = element_blank(),
               axis.ticks = element_blank(),
-              legend.position = "none",
-              axis.title.x = element_text(family = "karla", face = "bold", size=16),
-              axis.title.y = element_text(family = "karla", face = "bold", size=16),
-              plot.title = element_text(family = "karla", face = "bold", size=18)
-              )
+              legend.position = "none"
+            )
     })
-
+color <- reactive({
+    dplyr::case_when(dar() > input$dart ~ "#D50A0A", TRUE ~ "#013369")
+    })
+    
+shape <- reactive({
+    dplyr::case_when(dar() > input$dart ~ 17, TRUE ~ 19)
+    })
 plotOutput(outputId = "scatter1")
 ```
 
@@ -381,7 +374,7 @@ plotOutput(outputId = "scatter1")
 
 ## ROW 3: Reactable {data-width="100%"}
 
-### Stored Data Table View
+### 
 
 ```{r reactable}
 values <- reactiveValues()
@@ -396,27 +389,36 @@ values <- reactiveValues()
       Avg_Daily_Charge = numeric(), 
       Days_in_AR = numeric(), 
       AR_Target = numeric(), 
-      AR_Change_Needed = numeric())
+      AR_Change_Needed = numeric(),
+      Consideration = numeric())
+      
 
     observeEvent(input$submitButton, {
         new_row <- data.frame(
           Client = input$client,
           Start_Date = as.character(input$daterange[1]),
           End_Date = as.character(input$daterange[2]),
-          Number_of_Days = ndip2(), 
+          Number_of_Days = ndip(), 
           Gross_Charges = input$gct, 
           DAR_Target = input$dart, 
-          Ending_AR = input$earb, 
+          Ending_AR =  earb(), 
           Avg_Daily_Charge = adc(), 
           Days_in_AR = dar(), 
           AR_Target = earbtarg(), 
-          AR_Change_Needed = arch())
+          AR_Change_Needed = arch(),
+          Consideration = input$consid
+          )
         values$df <- rbind(values$df, new_row)
     })
-
+    
 output$table <- renderReactable({
       reactable(
         values$df,
+        highlight = TRUE,
+        striped = TRUE,
+        compact = TRUE,
+        outlined = TRUE,
+        borderless = TRUE,
         columns = list(
           Client = colDef(
             name = "Client"
@@ -434,28 +436,13 @@ output$table <- renderReactable({
             show = TRUE
             ),
           Gross_Charges = colDef(
-                    style = color_scales(
-            values$df, 
-            colors = ggsci::pal_material(
-              "blue-grey", 
-              n = 6, 
-              alpha = 1.0, 
-              reverse = FALSE)(6)),
           name = "Gross Charges",
           format = colFormat(
               separators = TRUE,
               digits = 2)
           ),
           Ending_AR = colDef(
-                    style = color_scales(
-            values$df, 
-            colors = ggsci::pal_material(
-              "blue-grey", 
-              n = 6, 
-              alpha = 1.0, 
-              reverse = FALSE)(6)),
           name = "Ending AR",
-          #width = 100,
           format = colFormat(
               separators = TRUE,
               digits = 2)
@@ -465,57 +452,32 @@ output$table <- renderReactable({
             show = FALSE
             ),
           Avg_Daily_Charge = colDef(
-                    style = color_scales(
-            values$df, 
-            colors = ggsci::pal_material(
-              "blue-grey", 
-              n = 6, 
-              alpha = 1.0, 
-              reverse = FALSE)(6)),
           name = "Avg Daily Charge",
-          #width = 100,
           format = colFormat(
               separators = TRUE,
               digits = 2)
           ),
           Days_in_AR = colDef(
-                    style = color_scales(
-            values$df, 
-            colors = ggsci::pal_material(
-              "blue-grey", 
-              n = 6, 
-              alpha = 1.0, 
-              reverse = FALSE)(6)),
           name = "Days in AR",
-          #width = 100,
           format = colFormat(
               separators = TRUE,
               digits = 2)
           ),
           AR_Target = colDef(
-                    style = color_scales(
-            values$df, 
-            colors = ggsci::pal_material(
-              "blue-grey", 
-              n = 6, 
-              alpha = 1.0, 
-              reverse = FALSE)(6)),
           name = "AR Target",
-          #width = 100,
+          show = FALSE,
           format = colFormat(
               separators = TRUE,
               digits = 2)
           ),
           AR_Change_Needed = colDef(
-                    style = color_scales(
-            values$df, 
-            colors = ggsci::pal_material(
-              "blue-grey", 
-              n = 6, 
-              alpha = 1.0, 
-              reverse = FALSE)(6)),
           name = "AR Change Needed",
-          #width = 100,
+          format = colFormat(
+              separators = TRUE,
+              digits = 2)
+          ),
+        Consideration = colDef(
+          name = "Consideration",
           format = colFormat(
               separators = TRUE,
               digits = 2)
@@ -525,18 +487,9 @@ output$table <- renderReactable({
     })
     
 reactableOutput("table")
-
-output$downloadButton <- downloadHandler(
-    filename = function() {
-        paste("dar-data-", Sys.Date(), ".csv", sep = ",")
-    },
-    content = function(file) {
-        write.csv(data, file)
-    }
-)
 ```
 
-# Days in AR Guide
+# Formula Reference
 
 ## Column
 
