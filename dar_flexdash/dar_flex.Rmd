@@ -38,7 +38,7 @@ dateRangeInput(
     inputId = "daterange",
     label = "Date Range:",
     start = "2022-01-01",
-    end = lubridate::today(),
+    end = "2022-01-01",
     min = "2001-01-01",
     max = lubridate::today() + 365,
     startview = "month",
@@ -256,16 +256,16 @@ valueBoxOutput("archBox", width = 2)
 
 -   In the left panel, enter:
 
-1.  the `Date Range` for which you are measuring Days in AR
+1.  the `Date Range` for which you are measuring `Days in AR`
 2.  the `Days in AR target` number that you are measuring against and
-3.  the `total Gross Charges` and `Ending AR balance` for the period you are measuring.
+3.  the `total Gross Charges` and `Ending AR balance` for the period you are measuring
 
--   The results of the calculations will populate in the `value boxes` above. If the `AR Change Needed` box's figure is enclosed in parentheses, it is showing the dollar amount that must be *removed* from the AR balance for Days in AR to fall below your target DAR.
--   The graph to the left will display the Gross Charges and Ending AR balance, on the x- and y-axis, respectively. If the point labelled "Actual DAR" is *red, triangular* and *above* and *to the left* of the dashed line, your Days in AR is *above* the target DAR you entered.
+-   The results of the calculations will populate in the `Value Boxes` above. If the `AR Change Needed` amount is *enclosed in parentheses*, that amount must be *removed* from the `Ending AR balance` for `Days in AR` to fall below your `Days in AR Target`.
+-   The plot to the left shows your `total Gross Charges` (x-axis) and `Ending AR balance` (y-axis) as a point, labelled with your current `Days in AR`. You want the point to be above and to the left of the diagonal line (representing the `Ideal Ratio` for the `Number of Days in the Period`) for `Days in AR` to be under the `Days in AR` target.
 
 > If you would like to make several calculations and store the results for comparison while using the app, click the **Submit** button after inputting the information. The results will be stored in the table below while you use the app. No data that you have entered will be kept once the app is closed.
 
-### {data-height="100%"}
+### DAR Key Indicators: Gross Charges ($x$), Ending AR ($y$), Days in Period (Diagonal Line) {data-height="100%"}
 
 ```{r plot1}
 color <- reactive({
@@ -276,14 +276,6 @@ shape <- reactive({
     dplyr::case_when(dar() > input$dart ~ 17, TRUE ~ 19)
     })
 
-# color2 <- reactive({
-#     dplyr::case_when(dar2() > input$dart ~ "#D50A0A", TRUE ~ "#013369")
-#     })
-#     
-# shape2 <- reactive({
-#     dplyr::case_when(dar2() > input$dart ~ 17, TRUE ~ 19)
-#     })
-    
 output$scatter1 <-renderPlot({
     options(scipen = 999)
     ggplot(group=1) +
@@ -295,14 +287,6 @@ output$scatter1 <-renderPlot({
             size = 7, 
             alpha = 1, 
             na.rm = TRUE) +
-        # geom_point(aes(
-        #     input$gct, 
-        #     earbtarg(), 
-        #     color = color2(), 
-        #     shape = shape2()), 
-        #     size = 7, 
-        #     alpha = 1, 
-        #     na.rm = TRUE) +
         geom_abline(
             intercept = 0, 
             slope = irat(), 
@@ -318,8 +302,7 @@ output$scatter1 <-renderPlot({
             label = paste0(
               "DAR: ", 
               round(dar(), 
-                    digits = 2
-                    )
+                    digits = 2)
               ),  
             size = 5,
             fontface = "bold", color = "white",
@@ -332,23 +315,6 @@ output$scatter1 <-renderPlot({
             label.r = 0.5,
             label.size = 0.5
             ) +
-        # ggrepel::geom_label_repel(aes(
-        #     input$gct, 
-        #     earbtarg(), 
-        #     color = color2(),
-        #     fill = color2(),
-        #     label = paste0("Target DAR: ", round(dar2(), digits = 2))),
-        #     size = 5,
-        #     fontface = "bold", color = "white",
-        #     force = 0.3,
-        #     force_pull = 0.2,
-        #     box.padding = 2,
-        #     label.padding = 0.8,
-        #     point.padding = 0.8,
-        #     segment.color = "grey50", segment.size = 1,
-        #     label.r = 0.5,
-        #     label.size = 0.5
-        #     ) +
             scale_y_continuous(
                 labels = scales::dollar_format(
                     prefix="$"), 
@@ -357,14 +323,14 @@ output$scatter1 <-renderPlot({
                 labels = scales::dollar_format(
                     prefix="$"), 
                 limits = c(0, input$gct * 2.25))+
-            #tidyquant::scale_color_tq() +
-            #tidyquant::scale_fill_tq() +
+        tidyquant::theme_tq(base_size = 16) +
+            tidyquant::scale_color_tq() +
+            tidyquant::scale_fill_tq() +
             scale_shape_identity() +
             labs(
-              title = "Days in AR Key Indicator: Total Gross Charges & Ending AR Balance",
+              title = NULL,
                 x = "Total Gross Charges", 
                 y = "Ending AR Balance") +
-            #tidyquant::theme_tq(base_size = 16) +
             theme(
               panel.grid.minor = element_blank(),
               panel.grid.major.y = element_line(),
@@ -380,23 +346,11 @@ output$scatter1 <-renderPlot({
 plotOutput(outputId = "scatter1")
 ```
 
-```{r}
-# whole <-reactive({
-#     input$earb + input$gct
-#     })
-# 
-# arprop <-reactive({
-#     input$earb / whole()
-#     })
-# 
-# gcprop <-reactive({
-#     input$gct / whole()
-#     })
-```
+> Number of Days in Period: Represented by the diagonal line. This is because the slope of this line is equal to the Ideal Ratio, or the ratio of Ending AR to Gross Charges.
 
 ## Row {data-width="100%"}
 
-### 
+### Stored Data View
 
 ```{r reactable}
 values <- reactiveValues()
@@ -432,14 +386,6 @@ values <- reactiveValues()
 output$table <- renderReactable({
       reactable(
         values$df,
-        theme = pff(
-          font_size = 16,
-          font_color = "#878e94",
-          header_font_size = 14,
-          header_font_color = "#ffffff",
-          cell_padding = 4,
-          centered = FALSE
-          ),
         columns = list(
           Client = colDef(
             name = "Client"
