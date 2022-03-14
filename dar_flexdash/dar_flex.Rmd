@@ -1,5 +1,5 @@
 ---
-title: "Days in AR Analysis"
+title: "Days in AR Automated Analysis"
 output: 
   flexdashboard::flex_dashboard:
     theme:
@@ -29,7 +29,7 @@ library(ggrepel)
 
 # DAR Calculator
 
-## INPUTS {.sidebar data-width="275"}
+## SIDEBAR: Inputs {.sidebar data-width="275"}
 
 <br>
 
@@ -38,7 +38,7 @@ dateRangeInput(
     inputId = "daterange",
     label = "Date Range:",
     start = "2022-01-01",
-    end = "2022-01-01",
+    end = "2022-01-31",
     min = "2001-01-01",
     max = lubridate::today() + 365,
     startview = "month",
@@ -75,7 +75,7 @@ numericInput(
 textInput(
   inputId = "client",
   label = "Client Name:",
-  value = NULL,
+  value = "AAB",
   width = "100%",
   placeholder = "Enter Client Name"
 )
@@ -83,7 +83,19 @@ textInput(
 
 <hr>
 
-```{r sub}
+```{r update}
+actionButton(
+    inputId = "updateButton",
+    label = "Update", 
+    icon = shiny::icon("refresh", lib = "glyphicon"),
+    title = "Update your inputs.",
+    width = "100%"
+)
+```
+
+<br>
+
+```{r submit}
 actionButton(
   inputId = "submitButton", 
   label = "Submit", 
@@ -95,18 +107,37 @@ actionButton(
 
 <br>
 
-```{r book}
-# bookmarkButton(
-#   label = "Bookmark",
-#   icon = shiny::icon("link", lib = "glyphicon"),
-#   title = "Bookmark this application's state and get a URL for sharing.",
-#   id = "._bookmark_",
-#   width = "100%"
-# )
-# enableBookmarking("url")
+```{r bookmark}
+bookmarkButton(
+  label = "Bookmark",
+  icon = shiny::icon("link", lib = "glyphicon"),
+  title = "Bookmark this application's state and get a URL for sharing.",
+  id = "bookmark",
+  width = "100%"
+)
+
+setBookmarkExclude("bookmark")
+
+observeEvent(input$bookmark, {
+    session$doBookmark()
+  })
+
+enableBookmarking(store = "url")
 ```
 
-## Value Boxes
+<br>
+
+```{r download}
+downloadButton(
+    outputId = "downloadButton",
+    label = "Download CSV",
+    icon = shiny::icon("download", lib = "glyphicon"),
+    title = "Download a csv file of data stored in table",
+    width = "100%"
+)
+```
+
+## ROW 1: Value Boxes
 
 ### Number of Days
 
@@ -250,7 +281,7 @@ output$archBox <- renderValueBox({
 valueBoxOutput("archBox", width = 2)
 ```
 
-## Row
+## ROW 2: Instructions/Scatterplot
 
 ### Instructions for the Application
 
@@ -348,9 +379,9 @@ plotOutput(outputId = "scatter1")
 
 > Number of Days in Period: Represented by the diagonal line. This is because the slope of this line is equal to the Ideal Ratio, or the ratio of Ending AR to Gross Charges.
 
-## Row {data-width="100%"}
+## ROW 3: Reactable {data-width="100%"}
 
-### Stored Data View
+### Stored Data Table View
 
 ```{r reactable}
 values <- reactiveValues()
@@ -494,6 +525,15 @@ output$table <- renderReactable({
     })
     
 reactableOutput("table")
+
+output$downloadButton <- downloadHandler(
+    filename = function() {
+        paste("dar-data-", Sys.Date(), ".csv", sep = ",")
+    },
+    content = function(file) {
+        write.csv(data, file)
+    }
+)
 ```
 
 # Days in AR Guide
